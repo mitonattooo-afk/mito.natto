@@ -4,145 +4,162 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PVC Poker</title>
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <!-- Firebase SDK (v9 compat) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .buy-in-tag { display: inline-flex; align-items: center; background: #e2e8f0; border-radius: 4px; padding: 2px 6px; margin: 2px; font-size: 0.75rem; }
+        .buy-in-tag { display: inline-flex; align-items: center; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px 6px; margin: 2px; font-size: 0.75rem; }
         .remove-buyin { color: #ef4444; margin-left: 4px; cursor: pointer; font-weight: bold; }
         .admin-content { display: none; }
         .is-admin .admin-content { display: block !important; }
-        [v-cloak] { display: none; }
+        .is-admin .admin-inline { display: inline-block !important; }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen p-2 md:p-4">
+<body class="bg-slate-100 min-h-screen p-2 md:p-4 font-sans">
 
-    <div id="app" class="max-w-5xl mx-auto bg-white shadow-lg rounded-lg p-4 md:p-6 transition-all">
+    <div id="app" class="max-w-5xl mx-auto bg-white shadow-xl rounded-xl overflow-hidden transition-all">
         
-        <!-- 接続セクション -->
-        <div id="roomSelector" class="mb-6 p-4 bg-gray-800 text-white rounded-lg">
-            <h2 class="text-sm font-bold mb-2 uppercase tracking-widest text-gray-400">Step 1: ルームに接続</h2>
-            <div class="flex gap-2">
-                <input type="text" id="roomIdInput" placeholder="ルーム名 (例: my-poker-01)" class="flex-grow border rounded px-3 py-2 text-black font-bold">
-                <button onclick="connectRoom()" class="bg-indigo-500 hover:bg-indigo-600 px-6 py-2 rounded font-bold">接続 / 作成</button>
+        <!-- 1. ルーム入室画面 -->
+        <div id="roomSelector" class="p-8 text-center">
+            <h1 class="text-3xl font-black text-indigo-700 mb-2">MI TO NATTO POKER</h1>
+            <p class="text-gray-500 mb-8 text-sm font-medium">Cloud Sync Manager (Firestore)</p>
+            
+            <div class="max-w-sm mx-auto bg-slate-50 p-6 rounded-lg border">
+                <label class="block text-left text-xs font-bold text-gray-400 uppercase mb-2">ルーム名を入力</label>
+                <input type="text" id="roomIdInput" placeholder="例: tournament-01" class="w-full border-2 border-indigo-100 rounded-lg px-4 py-3 text-lg font-bold focus:border-indigo-500 outline-none mb-4">
+                <button onclick="connectRoom()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 rounded-lg shadow-lg transition">接続 / 新規作成</button>
             </div>
-            <p class="text-[10px] mt-2 text-gray-400">※同じルーム名を入力したスマホ同士でデータが同期されます。</p>
         </div>
 
+        <!-- 2. メインアプリ画面 (最初は非表示) -->
         <div id="mainApp" style="display:none;">
             <!-- ヘッダー -->
-            <div class="flex flex-wrap justify-between items-center mb-6 pb-4 border-b gap-4">
+            <div class="bg-indigo-700 p-4 md:p-6 text-white flex flex-wrap justify-between items-center gap-4">
                 <div>
-                    <h1 class="text-xl font-bold text-indigo-700">ルーム: <span id="displayRoomId" class="text-gray-900"></span></h1>
-                    <p class="text-[10px] text-gray-500">データは自動でクラウドに保存・同期されます</p>
+                    <div class="text-[10px] opacity-70 font-bold uppercase tracking-widest text-indigo-200">Room ID</div>
+                    <h2 id="displayRoomId" class="text-xl font-black"></h2>
                 </div>
                 
-                <div id="loginSection" class="flex gap-2 items-center bg-gray-50 p-2 rounded border">
-                    <input type="password" id="adminCodeInput" placeholder="管理コード" class="border rounded px-2 py-1 w-28 text-sm">
-                    <button onclick="toggleAdmin()" id="adminBtn" class="bg-indigo-600 text-white px-4 py-1 rounded text-sm hover:bg-indigo-700 transition font-bold">解除</button>
+                <div id="loginSection" class="flex gap-2 items-center bg-indigo-800 p-2 rounded-lg">
+                    <input type="password" id="adminCodeInput" placeholder="管理コード" class="border-none rounded px-3 py-1 w-28 text-sm text-black outline-none font-bold">
+                    <button onclick="toggleAdmin()" id="adminBtn" class="bg-indigo-500 text-white px-4 py-1 rounded text-sm hover:bg-white hover:text-indigo-700 transition font-black">解除</button>
                 </div>
             </div>
 
-            <!-- 管理パネル (管理モードのみ表示) -->
-            <div class="admin-content w-full mb-6 p-4 bg-indigo-50 rounded-lg border border-indigo-100">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
-                    <div>
-                        <label class="block font-bold text-gray-500 uppercase">レート (10点 = 何VND？)</label>
-                        <div class="flex items-center gap-2 mt-1">
-                            <input type="number" id="rate" value="10000" class="border rounded px-3 py-2 w-full text-lg" onchange="pushUpdate()">
-                            <span class="font-bold">VND</span>
+            <div class="p-4 md:p-6">
+                <!-- 管理設定パネル -->
+                <div class="admin-content mb-6 p-4 bg-amber-50 rounded-lg border border-amber-200">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                            <label class="block text-xs font-bold text-amber-700 uppercase mb-1">レート (10点 = 何VND？)</label>
+                            <div class="flex items-center gap-2">
+                                <input type="number" id="rate" value="10000" class="border rounded px-3 py-2 w-full font-bold" onchange="pushUpdate()">
+                                <span class="font-bold text-amber-800">VND</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-amber-700 uppercase mb-1">プレイヤー追加</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="newPlayerName" placeholder="名前" class="border rounded px-3 py-2 w-full font-bold">
+                                <button onclick="addPlayer()" class="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700 font-bold">追加</button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-amber-700 uppercase mb-1">管理コード変更</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="newAdminCodeInput" placeholder="新コード" class="border rounded px-3 py-2 w-full text-sm">
+                                <button onclick="updateAdminCode()" class="bg-slate-600 text-white px-3 py-2 rounded hover:bg-slate-700 text-xs font-bold">保存</button>
+                            </div>
                         </div>
                     </div>
-                    <div>
-                        <label class="block font-bold text-gray-500 uppercase">プレイヤー追加</label>
-                        <div class="flex gap-2 mt-1">
-                            <input type="text" id="newPlayerName" placeholder="名前" class="border rounded px-3 py-2 w-full text-lg">
-                            <button onclick="addPlayer()" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 font-bold">追加</button>
-                        </div>
+                </div>
+
+                <!-- プレイヤーテーブル -->
+                <div class="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+                    <table class="w-full text-left border-collapse bg-white">
+                        <thead class="bg-slate-50 border-b border-gray-200">
+                            <tr class="text-[10px] md:text-xs uppercase text-slate-500 font-black">
+                                <th class="p-4">プレイヤー</th>
+                                <th class="p-4">購入履歴</th>
+                                <th class="p-4 text-right">合計購入</th>
+                                <th class="p-4 admin-content text-center">追加購入</th>
+                                <th class="p-4 text-center">最終点数</th>
+                                <th class="p-4 text-right">収支 (VND)</th>
+                                <th class="p-4 admin-content text-center">削除</th>
+                            </tr>
+                        </thead>
+                        <tbody id="playerList" class="divide-y divide-gray-100">
+                            <!-- JS Injection -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 整合性チェック -->
+                <div class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-slate-800 p-4 rounded-xl text-center text-white shadow-lg">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase mb-1">Buy-in 合計</p>
+                        <p id="totalBuyInPoints" class="text-2xl font-black text-yellow-400">0</p>
                     </div>
-                    <div>
-                        <label class="block font-bold text-gray-500 uppercase">管理コード変更</label>
-                        <div class="flex gap-2 mt-1">
-                            <input type="text" id="newAdminCodeInput" placeholder="新しいコード" class="border rounded px-3 py-2 w-full text-sm">
-                            <button onclick="updateAdminCode()" class="bg-gray-500 text-white px-3 py-2 rounded hover:bg-gray-600 text-xs font-bold">保存</button>
-                        </div>
+                    <div class="bg-slate-800 p-4 rounded-xl text-center text-white shadow-lg">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase mb-1">Final 合計</p>
+                        <p id="totalFinalPoints" class="text-2xl font-black text-cyan-400">0</p>
+                    </div>
+                    <div class="bg-slate-800 p-4 rounded-xl text-center text-white shadow-lg">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase mb-1">不一致 (目標 0)</p>
+                        <p id="diffPoints" class="text-2xl font-black">0</p>
                     </div>
                 </div>
-            </div>
 
-            <!-- プレイヤー一覧 -->
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse">
-                    <thead>
-                        <tr class="bg-gray-100 text-[10px] md:text-xs uppercase text-gray-600">
-                            <th class="p-3 border">名前</th>
-                            <th class="p-3 border">購入履歴</th>
-                            <th class="p-3 border text-right">購入合計</th>
-                            <th class="p-3 border admin-content text-center">追加購入</th>
-                            <th class="p-3 border text-center">最終点数</th>
-                            <th class="p-3 border text-right">収支(VND)</th>
-                            <th class="p-3 border admin-content text-center">消</th>
-                        </tr>
-                    </thead>
-                    <tbody id="playerList" class="text-sm">
-                        <!-- JSで挿入 -->
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- 合計計算セクション -->
-            <div class="mt-8 p-4 bg-gray-800 text-white rounded-lg shadow-inner">
-                <div class="flex justify-between items-center mb-4 border-b border-gray-600 pb-2">
-                    <h2 class="text-lg font-bold uppercase tracking-wider text-indigo-300">整合性チェック</h2>
-                    <span id="statusBadge" class="text-[10px] px-2 py-1 rounded bg-red-900 text-red-100 font-bold uppercase">閲覧モード</span>
+                <div class="mt-6 flex justify-between items-center px-2">
+                    <span id="statusBadge" class="text-[10px] px-3 py-1 rounded-full bg-slate-200 text-slate-600 font-black uppercase">閲覧モード</span>
+                    <button onclick="resetAll()" class="admin-content text-red-600 text-[10px] font-black uppercase tracking-tighter hover:underline">全データをリセット</button>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-                    <div><p class="text-xs text-gray-400">BUY-IN 合計</p><p id="totalBuyInPoints" class="text-2xl font-mono text-yellow-400">0</p></div>
-                    <div><p class="text-xs text-gray-400">最終点数 合計</p><p id="totalFinalPoints" class="text-2xl font-mono text-blue-400">0</p></div>
-                    <div><p class="text-xs text-gray-400 font-bold uppercase">不一致</p><p id="diffPoints" class="text-2xl font-mono">0</p></div>
-                </div>
-            </div>
-
-            <div class="mt-6 flex justify-between items-center admin-content">
-                <button onclick="resetAll()" class="text-red-600 border border-red-600 px-4 py-2 rounded hover:bg-red-50 text-[10px] font-bold uppercase">全データをリセット</button>
             </div>
         </div>
     </div>
 
     <script>
-        // --- 1. Firebaseの設定 ---
-        // テスト用に公開設定のDBを使用します。機密性を高める場合は自身でFirebaseプロジェクトを作成してください。
+        // --- 1. Firebase 設定をここに貼り付けてください ---
         const firebaseConfig = {
-            databaseURL: "https://poker-manager-default-rtdb.firebaseio.com/" 
+            projectId: "mito-natto-168bd",
+            // ★Firebaseコンソールから取得した apiKey 等をここに追記してください
+            // apiKey: "AIza...",
+            // authDomain: "mito-natto-168bd.firebaseapp.com",
+            // storageBucket: "mito-natto-168bd.appspot.com",
+            // messagingSenderId: "...",
+            // appId: "..."
         };
+
+        // Firebase初期化
         firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
+        const db = firebase.firestore();
 
         let currentRoomId = "";
         let players = [];
         let adminCode = "0000";
         let isAdmin = false;
+        let isFirstLoad = true;
 
-        // --- 2. ルーム接続機能 ---
-        function connectRoom() {
+        // --- 2. ルーム接続 ---
+        async function connectRoom() {
             const id = document.getElementById('roomIdInput').value.trim();
             if (!id) return alert("ルーム名を入力してください");
             currentRoomId = id;
-            
-            // ルームのデータを監視開始
-            const roomRef = database.ref('rooms/' + currentRoomId);
-            roomRef.on('value', (snapshot) => {
-                const data = snapshot.val();
-                if (data) {
+
+            // Firestoreのドキュメントをリアルタイム監視
+            db.collection("pokerRooms").doc(currentRoomId).onSnapshot((doc) => {
+                if (doc.exists) {
+                    const data = doc.data();
                     players = data.players || [];
                     adminCode = data.adminCode || "0000";
                     document.getElementById('rate').value = data.rate || 10000;
                     render();
-                } else {
-                    // 新規ルーム作成
+                } else if (isFirstLoad) {
+                    // 新規作成
                     pushUpdate();
                 }
+                isFirstLoad = false;
             });
 
             document.getElementById('roomSelector').style.display = 'none';
@@ -150,18 +167,19 @@
             document.getElementById('displayRoomId').innerText = currentRoomId;
         }
 
-        // --- 3. データ同期機能 (Firebaseへ送信) ---
-        function pushUpdate() {
-            if (currentRoomId === "") return;
+        // --- 3. Firestoreへ更新を送信 ---
+        async function pushUpdate() {
+            if (!currentRoomId) return;
             const rate = document.getElementById('rate').value;
-            database.ref('rooms/' + currentRoomId).set({
+            await db.collection("pokerRooms").doc(currentRoomId).set({
                 players: players,
                 adminCode: adminCode,
-                rate: rate
-            });
+                rate: parseInt(rate),
+                lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
         }
 
-        // --- 4. 管理モード管理 ---
+        // --- 4. 管理モード制御 ---
         function toggleAdmin() {
             const input = document.getElementById('adminCodeInput');
             const btn = document.getElementById('adminBtn');
@@ -172,23 +190,21 @@
                 if (input.value === adminCode) {
                     isAdmin = true;
                     btn.innerText = "ロック";
-                    btn.classList.replace('bg-indigo-600', 'bg-red-600');
                     input.style.display = 'none';
                     app.classList.add('is-admin');
-                    badge.innerText = "管理モード：編集中";
-                    badge.className = "text-[10px] px-2 py-1 rounded bg-green-700 text-white font-bold";
+                    badge.innerText = "ADMIN MODE";
+                    badge.className = "text-[10px] px-3 py-1 rounded-full bg-amber-500 text-white font-black uppercase";
                 } else {
                     alert("コードが違います");
                 }
             } else {
                 isAdmin = false;
                 btn.innerText = "解除";
-                btn.classList.replace('bg-red-600', 'bg-indigo-600');
                 input.style.display = 'inline-block';
                 input.value = "";
                 app.classList.remove('is-admin');
-                badge.innerText = "閲覧モード";
-                badge.className = "text-[10px] px-2 py-1 rounded bg-red-900 text-red-100 font-bold";
+                badge.innerText = "READ ONLY";
+                badge.className = "text-[10px] px-3 py-1 rounded-full bg-slate-200 text-slate-600 font-black uppercase";
             }
             render();
         }
@@ -238,20 +254,20 @@
         }
 
         function removePlayer(playerId) {
-            if (confirm("削除しますか？")) {
+            if (confirm("本当にこのプレイヤーを削除しますか？")) {
                 players = players.filter(p => p.id !== playerId);
                 pushUpdate();
             }
         }
 
         function resetAll() {
-            if (confirm("全てのデータを消去しますか？")) {
+            if (confirm("全データを消去します。よろしいですか？")) {
                 players = [];
                 pushUpdate();
             }
         }
 
-        // --- 6. 描画機能 ---
+        // --- 6. 画面描画 ---
         function render() {
             const list = document.getElementById('playerList');
             const rate = parseFloat(document.getElementById('rate').value) || 0;
@@ -272,30 +288,30 @@
                 ).join('');
 
                 const row = document.createElement('tr');
-                row.className = "border-b hover:bg-gray-50 transition";
+                row.className = "hover:bg-slate-50 transition";
                 row.innerHTML = `
-                    <td class="p-3 border font-bold text-gray-800">${player.name}</td>
-                    <td class="p-3 border">
-                        <div class="flex flex-wrap items-center">${historyHtml || '-'}</div>
+                    <td class="p-4 font-black text-slate-800">${player.name}</td>
+                    <td class="p-4">
+                        <div class="flex flex-wrap items-center">${historyHtml || '<span class="text-slate-300 font-bold">-</span>'}</div>
                     </td>
-                    <td class="p-3 border text-right font-mono font-bold text-gray-500">${buyInTotal.toLocaleString()}</td>
-                    <td class="p-3 border admin-content">
+                    <td class="p-4 text-right font-mono font-black text-slate-500">${buyInTotal.toLocaleString()}</td>
+                    <td class="p-4 admin-content">
                         <div class="flex gap-1 justify-center">
-                            <input type="number" id="buyInInput-${player.id}" class="border rounded px-1 py-1 w-14 text-sm">
-                            <button onclick="addBuyIn(${player.id})" class="bg-green-600 text-white px-2 py-1 rounded text-sm font-bold">+</button>
+                            <input type="number" id="buyInInput-${player.id}" class="border rounded px-1 py-1 w-16 font-bold text-center">
+                            <button onclick="addBuyIn(${player.id})" class="bg-green-600 text-white px-2 py-1 rounded font-black">+</button>
                         </div>
                     </td>
-                    <td class="p-3 border text-center font-bold">
+                    <td class="p-4 text-center">
                         ${isAdmin 
-                            ? `<input type="number" value="${player.finalChips}" onchange="updateFinal(${player.id}, this.value)" class="border rounded px-2 py-1 w-20 text-right font-mono font-bold">`
-                            : `<span class="font-mono text-indigo-700">${player.finalChips.toLocaleString()}</span>`
+                            ? `<input type="number" value="${player.finalChips}" onchange="updateFinal(${player.id}, this.value)" class="border rounded px-2 py-1 w-24 text-right font-mono font-black bg-white">`
+                            : `<span class="font-mono font-black text-indigo-700">${player.finalChips.toLocaleString()}</span>`
                         }
                     </td>
-                    <td class="p-3 border text-right font-mono font-bold ${profitMoney >= 0 ? 'text-blue-600' : 'text-red-600'}">
+                    <td class="p-4 text-right font-mono font-black ${profitMoney >= 0 ? 'text-blue-600' : 'text-red-600'}">
                         ${profitMoney.toLocaleString()}
                     </td>
-                    <td class="p-3 border text-center admin-content">
-                        <button onclick="removePlayer(${player.id})" class="text-red-300 hover:text-red-600 transition text-xs">✕</button>
+                    <td class="p-4 text-center admin-content">
+                        <button onclick="removePlayer(${player.id})" class="text-slate-300 hover:text-red-600 transition">✕</button>
                     </td>
                 `;
                 list.appendChild(row);
@@ -306,7 +322,7 @@
             const diff = totalFinal - totalBuyIn;
             const diffEl = document.getElementById('diffPoints');
             diffEl.innerText = diff.toLocaleString();
-            diffEl.className = diff === 0 ? "text-2xl font-mono text-green-400" : "text-2xl font-mono text-red-500";
+            diffEl.className = diff === 0 ? "text-2xl font-black text-green-400" : "text-2xl font-black text-red-500";
         }
     </script>
 </body>
