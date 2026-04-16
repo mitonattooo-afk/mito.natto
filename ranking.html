@@ -3,112 +3,128 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>収支ランキング</title>
+    <title>ポーカー収支ランキングV2</title>
     <style>
-        body { font-family: sans-serif; margin: 20px; background-color: #f4f7f6; }
-        h1 { text-align: center; color: #333; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background-color: #4CAF50; color: white; }
-        tr:nth-child(even) { background-color: #f9f9f9; }
-        .rank-1 { font-weight: bold; color: #d4af37; } /* 金 */
-        .rank-2 { font-weight: bold; color: #aaa9ad; } /* 銀 */
-        .rank-3 { font-weight: bold; color: #b08d57; } /* 銅 */
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 20px; background-color: #f0f2f5; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { text-align: center; color: #1a1a1a; margin-bottom: 30px; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        th, td { padding: 15px; text-align: center; border-bottom: 1px solid #eee; }
+        th { background-color: #2c3e50; color: white; font-weight: bold; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background-color: #f8f9fa; }
+        
+        .plus { color: #2ecc71; font-weight: bold; } /* 勝ち */
+        .minus { color: #e74c3c; font-weight: bold; } /* 負け */
+        
+        .rank-1 { background-color: #fff9c4; font-weight: bold; } /* 1位の背景を少し豪華に */
+        .rank-num { font-size: 1.2em; font-weight: bold; }
         .loading { text-align: center; font-size: 1.2em; margin-top: 50px; }
     </style>
 </head>
 <body>
 
-    <h1>収支ランキング</h1>
-    <div id="loading" class="loading">データを読み込み中...</div>
-    <table id="rankingTable" style="display:none;">
-        <thead>
-            <tr>
-                <th>順位</th>
-                <th>名前</th>
-                <th>buyIns合計</th>
-                <th>finalChips合計</th>
-                <th>収支 (差分)</th>
-            </tr>
-        </thead>
-        <tbody id="rankingBody">
-            <!-- ここにデータが挿入されます -->
-        </tbody>
-    </table>
+    <div class="container">
+        <h1>ポーカー収支ランキング</h1>
+        <div id="loading" class="loading">データを取得中...</div>
+        <table id="rankingTable" style="display:none;">
+            <thead>
+                <tr>
+                    <th>順位</th>
+                    <th>名前</th>
+                    <th>総購入額</th>
+                    <th>最終チップ</th>
+                    <th>収支</th>
+                </tr>
+            </thead>
+            <tbody id="rankingBody">
+                <!-- JavaScriptで挿入 -->
+            </tbody>
+        </table>
+    </div>
 
-    <!-- Firebase SDK の読み込み -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-        // Firebase設定
         const firebaseConfig = {
             projectId: "mito-natto-168bd",
-            apiKey: "ここにAPIキーを入れてください", 
             authDomain: "mito-natto-168bd.firebaseapp.com",
             databaseURL: "https://mito-natto-168bd-default-rtdb.firebaseio.com",
             storageBucket: "mito-natto-168bd.appspot.com",
-            messagingSenderId: "...",
-            appId: "..."
         };
 
-        // Firebase初期化
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        async function fetchAndRenderRanking() {
+        async function fetchRanking() {
             try {
-                // 'records' というパスにデータがある想定です。適宜変更してください。
-                const dbRef = ref(db, 'pokerRooms'); 
+                const dbRef = ref(db, 'pokerRooms');
                 const snapshot = await get(dbRef);
 
                 if (snapshot.exists()) {
-                    const data = snapshot.val();
-                    const aggregation = {};
+                    const rooms = snapshot.val();
+                    const playerStats = {};
 
-                    // 1. 名前単位で集計
-                    Object.values(data).forEach(entry => {
-                        const name = entry.name;
-                        const buyIn = Number(entry.buyIns) || 0;
-                        const finalChip = Number(entry.finalChips) || 0;
+                    // 各ルーム/エントリをループ
+                    Object.values(rooms).forEach(room => {
+                        // room自体がデータの配列やオブジェクトの場合を考慮
+                        // もしpokerRoomsの直下にユーザーデータが並んでいる場合の処理
+                        const name = room.name;
+                        if (!name) return;
 
-                        if (!aggregation[name]) {
-                            aggregation[name] = { name: name, totalBuyIns: 0, totalFinalChips: 0 };
+                        // buyInsが配列またはオブジェクトであることを想定して合計を計算
+                        let currentBuyInTotal = 0;
+                        if (room.buyIns) {
+                            if (Array.isArray(room.buyIns)) {
+                                currentBuyInTotal = room.buyIns.reduce((sum, val) => sum + (Number(val) || 0), 0);
+                            } else if (typeof room.buyIns === 'object') {
+                                currentBuyInTotal = Object.values(room.buyIns).reduce((sum, val) => sum + (Number(val) || 0), 0);
+                            } else {
+                                currentBuyInTotal = Number(room.buyIns) || 0;
+                            }
                         }
-                        aggregation[name].totalBuyIns += buyIn;
-                        aggregation[name].totalFinalChips += finalChip;
+
+                        const currentFinalChips = Number(room.finalChips) || 0;
+
+                        // 名前単位で集計
+                        if (!playerStats[name]) {
+                            playerStats[name] = { name: name, totalBuyIns: 0, totalFinalChips: 0 };
+                        }
+                        playerStats[name].totalBuyIns += currentBuyInTotal;
+                        playerStats[name].totalFinalChips += currentFinalChips;
                     });
 
-                    // 2. 配列に変換し、計算(buyIns - finalChips)
-                    const rankingArray = Object.values(aggregation).map(item => {
+                    // 収支計算とランキング用配列への変換
+                    const rankingArray = Object.values(playerStats).map(player => {
                         return {
-                            ...item,
-
-                            balance: item.totalFinalChips - item.totalBuyIns
+                            name: player.name,
+                            totalBuyIns: player.totalBuyIns,
+                            totalFinalChips: player.totalFinalChips,
+                            profit: player.totalFinalChips - player.totalBuyIns // 収支計算
                         };
                     });
 
-                    // 3. 収支が高い順にソート
-                    rankingArray.sort((a, b) => b.balance - a.balance);
+                    // 収支が高い順（勝っている順）にソート
+                    rankingArray.sort((a, b) => b.profit - a.profit);
 
-                    // 4. HTMLに描画
+                    // HTML描画
                     const tbody = document.getElementById('rankingBody');
                     tbody.innerHTML = '';
 
-                    rankingArray.forEach((item, index) => {
+                    rankingArray.forEach((player, index) => {
                         const tr = document.createElement('tr');
-                        const rank = index + 1;
-                        let rankClass = '';
-                        if(rank === 1) rankClass = 'rank-1';
-                        if(rank === 2) rankClass = 'rank-2';
-                        if(rank === 3) rankClass = 'rank-3';
+                        if (index === 0) tr.className = 'rank-1';
+
+                        const profitClass = player.profit > 0 ? 'plus' : (player.profit < 0 ? 'minus' : '');
+                        const profitPrefix = player.profit > 0 ? '+' : '';
 
                         tr.innerHTML = `
-                            <td class="${rankClass}">${rank}位</td>
-                            <td>${item.name}</td>
-                            <td>${item.totalBuyIns.toLocaleString()}</td>
-                            <td>${item.totalFinalChips.toLocaleString()}</td>
-                            <td><strong>${item.balance.toLocaleString()}</strong></td>
+                            <td class="rank-num">${index + 1}</td>
+                            <td>${player.name}</td>
+                            <td>${player.totalBuyIns.toLocaleString()}</td>
+                            <td>${player.totalFinalChips.toLocaleString()}</td>
+                            <td class="${profitClass}">${profitPrefix}${player.profit.toLocaleString()}</td>
                         `;
                         tbody.appendChild(tr);
                     });
@@ -116,15 +132,15 @@
                     document.getElementById('loading').style.display = 'none';
                     document.getElementById('rankingTable').style.display = 'table';
                 } else {
-                    document.getElementById('loading').innerText = "データが見つかりませんでした。";
+                    document.getElementById('loading').innerText = "データがありません。";
                 }
             } catch (error) {
-                console.error("Error fetching data:", error);
-                document.getElementById('loading').innerText = "エラーが発生しました。コンソールを確認してください。";
+                console.error(error);
+                document.getElementById('loading').innerText = "エラーが発生しました。";
             }
         }
 
-        fetchAndRenderRanking();
+        fetchRanking();
     </script>
 </body>
 </html>
