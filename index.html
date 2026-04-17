@@ -26,10 +26,13 @@
             <a href="ranking.html" style="display: inline-block;">
                 <img src="logo.png" alt="ロゴ" style="max-width: 100%; height: auto; display: block;">
             </a>
-            <p class="text-slate-400 font-bold text-[10px] tracking-[0.2em] mb-10 uppercase text-center">Ver2.0.1</p>
+            <p class="text-slate-400 font-bold text-[10px] tracking-[0.2em] mb-10 uppercase text-center">Ver2.1.1</p>
             <div class="bg-white p-6 rounded-2xl shadow-xl border border-slate-100">
                 <input type="text" id="roomIdInput" placeholder="ルーム名を入力" class="w-full border-2 border-slate-100 rounded-xl px-4 py-4 text-center text-xl font-bold focus:border-indigo-500 outline-none mb-4">
-                <button onclick="connectRoom()" class="w-full bg-indigo-600 text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition">入室 / 作成</button>
+                <div class="flex gap-2">
+                    <button onclick="joinRoom()" class="w-1/2 bg-indigo-600 text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition">入室</button>
+                    <button onclick="createRoom()" class="w-1/2 bg-emerald-600 text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition">作成</button>
+                </div>
             </div>
         </div>
 
@@ -116,9 +119,41 @@
         let adminCode = "0000";
         let isAdmin = false;
 
-        async function connectRoom() {
+        // 入室ボタン
+        async function joinRoom() {
             const id = document.getElementById('roomIdInput').value.trim();
             if (!id) return alert("ルーム名を入力してください");
+
+            const doc = await db.collection("pokerRooms").doc(id).get();
+            if (!doc.exists) {
+                alert("エラー：ルームが存在しません。");
+                return;
+            }
+            startRoomSession(id);
+        }
+
+        // 作成ボタン
+        async function createRoom() {
+            const id = document.getElementById('roomIdInput').value.trim();
+            if (!id) return alert("ルーム名を入力してください");
+
+            const doc = await db.collection("pokerRooms").doc(id).get();
+            if (doc.exists) {
+                alert("エラー：既に同じ名前のルームが存在します。");
+                return;
+            }
+
+            // 新規作成
+            await db.collection("pokerRooms").doc(id).set({
+                players: [],
+                adminCode: "0000",
+                rate: 10000
+            });
+            startRoomSession(id);
+        }
+
+        // ルーム開始共通処理
+        function startRoomSession(id) {
             currentRoomId = id;
             db.collection("pokerRooms").doc(currentRoomId).onSnapshot((doc) => {
                 if (doc.exists) {
@@ -127,8 +162,6 @@
                     adminCode = data.adminCode || "0000";
                     document.getElementById('rate').value = data.rate || 10000;
                     render();
-                } else {
-                    pushUpdate();
                 }
             });
             document.getElementById('roomSelector').style.display = 'none';
@@ -137,7 +170,7 @@
         }
 
         async function pushUpdate() {
-            if (!currentRoomId || !isAdmin && players.length > 0) return; // ロック時は基本送らない
+            if (!currentRoomId || (!isAdmin && players.length > 0)) return;
             const rate = document.getElementById('rate').value;
             await db.collection("pokerRooms").doc(currentRoomId).set({
                 players: players,
@@ -179,7 +212,6 @@
             render();
         }
 
-        // 以下、すべての編集関数に isAdmin チェックを追加
         function addPlayer() {
             if (!isAdmin) return;
             const nameInput = document.getElementById('newPlayerName');
@@ -275,7 +307,6 @@
                         </div>
                     </div>
 
-                    <!-- 追加購入入力（管理モードのみ） -->
                     <div class="admin-ui mb-4 flex gap-2">
                         <input type="number" id="buyIn-${p.id}" placeholder="点数" class="flex-grow border rounded-lg px-3 py-1 font-bold text-sm bg-slate-50 outline-none focus:border-green-500">
                         <button onclick="addBuyIn(${p.id})" class="bg-green-600 text-white px-4 py-1 rounded-lg font-black text-sm">+</button>
