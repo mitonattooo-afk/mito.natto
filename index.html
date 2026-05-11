@@ -26,7 +26,7 @@
             <a href="ranking.html" style="display: inline-block;">
                 <img src="logo.png" alt="ロゴ" style="max-width: 100%; height: auto; display: block;">
             </a>
-            <p class="text-slate-400 font-bold text-[10px] tracking-[0.2em] mb-10 uppercase text-center">Ver2.1.1</p>
+            <p class="text-slate-400 font-bold text-[10px] tracking-[0.2em] mb-10 uppercase text-center">Ver2.3.0</p>
             <div class="bg-white p-6 rounded-2xl shadow-xl border border-slate-100">
                 <input type="text" id="roomIdInput" placeholder="ルーム名を入力" class="w-full border-2 border-slate-100 rounded-xl px-4 py-4 text-center text-xl font-bold focus:border-indigo-500 outline-none mb-4">
                 <div class="flex gap-2">
@@ -74,11 +74,43 @@
                         </div>
                     </div>
 
-                    <div>
-                        <label class="block text-[9px] font-black text-amber-600 uppercase font-bold">プレイヤー追加</label>
-                        <div class="flex gap-2 mt-1">
-                            <input type="text" id="newPlayerName" class="flex-grow border rounded-lg px-3 py-2 font-bold text-sm outline-none focus:border-amber-500">
-                            <button onclick="addPlayer()" class="bg-amber-600 text-white px-5 py-2 rounded-lg font-bold text-sm shadow-md">追加</button>
+                    <!-- プレイヤー追加セクション -->
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-[9px] font-black text-amber-600 uppercase font-bold">メンバーから追加</label>
+                            <div class="flex gap-2 mt-1">
+                                <select id="memberListSelect" class="flex-grow border rounded-lg px-3 py-2 font-bold text-sm bg-white outline-none focus:border-amber-500">
+                                    <option value="">選択してください</option>
+                                    <option value="Steven">Steven</option>
+                                    <option value="鈴木">鈴木</option>
+                                    <option value="菊池">菊池</option>
+                                    <option value="中川">中川</option>
+                                    <option value="いなちゃん">いなちゃん</option>
+                                    <option value="みぞさん">みぞさん</option>
+                                    <option value="てらっち">てらっち</option>
+                                    <option value="きむら">きむら</option>
+                                    <option value="洋平">洋平</option>
+                                    <option value="教授">教授</option>
+                                    <option value="富田">富田</option>
+                                    <option value="OJIRO">OJIRO</option>
+                                    <option value="いしはら">いしはら</option>
+                                    <option value="ゆず">ゆず</option>
+                                    <option value="Chris">Chris</option>
+                                    <option value="石井">石井</option>
+                                    <option value="Jake">Jake</option>
+                                    <option value="尚人">尚人</option>
+                                    <option value="宇野">宇野</option>
+                                    <option value="奥山">奥山</option>
+                                </select>
+                                <button onclick="addPlayerFromSelect()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-md">追加</button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-[9px] font-black text-amber-600 uppercase font-bold">直接入力で追加</label>
+                            <div class="flex gap-2 mt-1">
+                                <input type="text" id="newPlayerName" placeholder="名前を入力" class="flex-grow border rounded-lg px-3 py-2 font-bold text-sm outline-none focus:border-amber-500">
+                                <button onclick="addPlayerManual()" class="bg-amber-600 text-white px-5 py-2 rounded-lg font-bold text-sm shadow-md">追加</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -119,11 +151,9 @@
         let adminCode = "0000";
         let isAdmin = false;
 
-        // 入室ボタン
         async function joinRoom() {
             const id = document.getElementById('roomIdInput').value.trim();
             if (!id) return alert("ルーム名を入力してください");
-
             const doc = await db.collection("pokerRooms").doc(id).get();
             if (!doc.exists) {
                 alert("エラー：ルームが存在しません。");
@@ -132,18 +162,14 @@
             startRoomSession(id);
         }
 
-        // 作成ボタン
         async function createRoom() {
             const id = document.getElementById('roomIdInput').value.trim();
             if (!id) return alert("ルーム名を入力してください");
-
             const doc = await db.collection("pokerRooms").doc(id).get();
             if (doc.exists) {
                 alert("エラー：既に同じ名前のルームが存在します。");
                 return;
             }
-
-            // 新規作成
             await db.collection("pokerRooms").doc(id).set({
                 players: [],
                 adminCode: "0000",
@@ -152,7 +178,6 @@
             startRoomSession(id);
         }
 
-        // ルーム開始共通処理
         function startRoomSession(id) {
             currentRoomId = id;
             db.collection("pokerRooms").doc(currentRoomId).onSnapshot((doc) => {
@@ -179,7 +204,6 @@
             }, { merge: true });
         }
 
-        // 管理者モードの切替
         function toggleAdmin() {
             const input = document.getElementById('adminCodeInput');
             const btn = document.getElementById('adminBtn');
@@ -212,13 +236,34 @@
             render();
         }
 
-        function addPlayer() {
+        // メンバーリストから追加
+        function addPlayerFromSelect() {
+            if (!isAdmin) return;
+            const select = document.getElementById('memberListSelect');
+            const name = select.value;
+            if (!name) return alert("メンバーを選択してください");
+            executeAddPlayer(name);
+            select.value = ""; // リセット
+        }
+
+        // 直接入力で追加
+        function addPlayerManual() {
             if (!isAdmin) return;
             const nameInput = document.getElementById('newPlayerName');
             const name = nameInput.value.trim();
-            if (!name || players.length >= 9) return;
+            if (!name) return alert("名前を入力してください");
+            executeAddPlayer(name);
+            nameInput.value = ""; // リセット
+        }
+
+        // プレイヤー追加の共通処理
+        function executeAddPlayer(name) {
+            if (players.length >= 20) return alert("最大人数に達しています");
+            // 重複チェック（任意）
+            if (players.some(p => p.name === name)) {
+                if (!confirm("同じ名前のプレイヤーが既にいます。追加しますか？")) return;
+            }
             players.push({ id: Date.now(), name: name, buyIns: [], finalChips: 0 });
-            nameInput.value = "";
             pushUpdate();
         }
 
